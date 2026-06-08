@@ -224,7 +224,10 @@
 <div id="dashboard">
   <div id="topbar">
     <h1>&#127968; Home Assistant</h1>
-    <span id="conn-badge" class="ok">&#9679; Connected</span>
+    <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:10px">
+      <span id="conn-badge" class="ok">&#9679; Connected</span>
+      <button onclick="doLogout()" style="background:none;border:none;color:#48484a;font-size:12px;cursor:pointer;padding:2px 0">Logout</button>
+    </div>
   </div>
   <div id="content"></div>
 </div>
@@ -241,6 +244,8 @@ var states = {};
 var forecast = [];
 var forecastMsgId = -1;
 var refreshTimer = null;
+var refreshRetries = 0;
+var MAX_REFRESH_RETRIES = 10;
 
 // BMS / energy entity IDs
 var BMS_PACK_COUNT = 6;
@@ -365,19 +370,59 @@ function loginError() {
   setStatus('');
 }
 function storeTokens(r) {
-  accessToken = r.access_token; refreshToken = r.refresh_token;
+  accessToken = r.access_token;
+  // Only update refreshToken if HA returns a new one (it sometimes does, sometimes doesn't)
+  if (r.refresh_token) refreshToken = r.refresh_token;
   localStorage.setItem('ha_access_token', accessToken);
   localStorage.setItem('ha_refresh_token', refreshToken);
+  refreshRetries = 0;
+  // Proactively refresh 5 min before the 30min expiry
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(function() { refreshAccessToken(function(){}); }, 25 * 60 * 1000);
 }
+
 function refreshAccessToken(cb) {
   xhr('POST', '/auth/token',
     'grant_type=refresh_token&refresh_token=' + encodeURIComponent(refreshToken) + '&client_id=' + encodeURIComponent(CLIENT_ID),
-    'application/x-www-form-urlencoded', function(r) {
-      if (r.access_token) { storeTokens(r); cb(); }
-      else { localStorage.removeItem('ha_access_token'); localStorage.removeItem('ha_refresh_token'); location.reload(); }
-    });
+    'application/x-www-form-urlencoded',
+    function(r) {
+      if (r.access_token) {
+        // Success — got a fresh token
+        refreshRetries = 0;
+        storeTokens(r);
+        cb();
+      } else if (r.error === 'invalid_grant') {
+        // Refresh token itself was revoked — must log in again
+        doLogout();
+      } else {
+        // Network error or temporary failure — retry with backoff, never log out
+        refreshRetries++;
+        if (refreshRetries <= MAX_REFRESH_RETRIES) {
+          var delay = Math.min(refreshRetries * 5000, 60000); // 5s, 10s … up to 60s
+          setStatus('Reconnecting… (attempt ' + refreshRetries + ')');
+          setTimeout(function() { refreshAccessToken(cb); }, delay);
+        } else {
+          // Still failing after 10 tries — reset counter and keep trying every 60s forever
+          refreshRetries = 0;
+          setStatus('Network unavailable — retrying…');
+          setTimeout(function() { refreshAccessToken(cb); }, 60000);
+        }
+      }
+    }
+  );
+}
+
+function doLogout() {
+  clearTimeout(refreshTimer);
+  if (ws) { try { ws.close(); } catch(e) {} ws = null; }
+  localStorage.removeItem('ha_access_token');
+  localStorage.removeItem('ha_refresh_token');
+  accessToken = null; refreshToken = null;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'block';
+  document.getElementById('ha-user').value = '';
+  document.getElementById('ha-pass').value = '';
+  setStatus('');
 }
 
 /* ── WebSocket ─────────────────────────── */
@@ -399,7 +444,9 @@ function connect() {
         service: 'get_forecasts', service_data: { type: 'daily', entity_id: WEATHER_EID },
         return_response: true }));
     } else if (msg.type === 'auth_invalid') {
-      ws.close(); refreshAccessToken(connect);
+      // Access token expired — close WS and refresh, don't log out
+      try { ws.close(); } catch(e) {}
+      refreshAccessToken(connect);
     } else if (msg.type === 'result' && msg.id === forecastMsgId) {
       try {
         forecast = msg.result.response[WEATHER_EID].forecast || [];

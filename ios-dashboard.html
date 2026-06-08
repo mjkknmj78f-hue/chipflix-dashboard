@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Home Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; color: #fff; font-family: -apple-system, Helvetica, sans-serif; }
+
+    /* Login */
+    #login-screen {
+      max-width: 360px; margin: 60px auto; padding: 24px;
+      background: #1c1c1e; border-radius: 14px;
+    }
+    #login-screen h2 { font-size: 20px; margin-bottom: 6px; }
+    #login-screen p { color: #8e8e93; font-size: 13px; line-height: 1.5; margin-bottom: 16px; }
+    #login-screen input {
+      width: 100%; padding: 10px 12px; background: #2c2c2e;
+      border: 1px solid #3a3a3c; border-radius: 8px;
+      color: #fff; font-size: 15px; margin-bottom: 10px; display: block;
+    }
+    #login-screen button {
+      width: 100%; padding: 12px; background: #0a84ff;
+      color: #fff; border: none; border-radius: 10px; font-size: 16px; cursor: pointer;
+    }
+    #login-error { color: #ff453a; font-size: 13px; margin-top: 10px; display: none; }
+
+    /* Dashboard layout */
+    #dashboard { display: none; }
+    #topbar {
+      display: -webkit-flex; display: flex;
+      -webkit-align-items: center; align-items: center;
+      -webkit-justify-content: space-between; justify-content: space-between;
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid #2c2c2e;
+    }
+    #topbar h1 { font-size: 17px; font-weight: 600; }
+    #conn-badge { font-size: 12px; }
+    #conn-badge.ok  { color: #30d158; }
+    #conn-badge.err { color: #ff453a; }
+    #content { padding: 12px 14px 40px; }
+
+    /* Section */
+    .section { margin-bottom: 18px; }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+      color: #8e8e93; text-transform: uppercase; margin-bottom: 8px;
+    }
+
+    /* ── Energy Card ────────────────── */
+    .energy-card {
+      background: #1c1c1e; border-radius: 14px; padding: 14px;
+    }
+    .energy-header {
+      display: -webkit-flex; display: flex;
+      -webkit-align-items: center; align-items: center;
+      -webkit-justify-content: space-between; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .energy-soc {
+      font-size: 36px; font-weight: 700; line-height: 1;
+    }
+    .energy-soc.high   { color: #30d158; }
+    .energy-soc.mid    { color: #ffd60a; }
+    .energy-soc.low    { color: #ff453a; }
+
+    .energy-flow {
+      text-align: right;
+    }
+    .energy-flow-val {
+      font-size: 18px; font-weight: 600;
+    }
+    .energy-flow-val.charging    { color: #30d158; }
+    .energy-flow-val.discharging { color: #ff9f0a; }
+    .energy-flow-val.idle        { color: #8e8e93; }
+    .energy-flow-label { font-size: 11px; color: #8e8e93; margin-top: 2px; }
+
+    /* SOC bar */
+    .soc-bar-track {
+      height: 8px; background: #3a3a3c; border-radius: 4px;
+      margin-bottom: 10px; overflow: hidden;
+    }
+    .soc-bar-fill {
+      height: 100%; border-radius: 4px;
+      -webkit-transition: width 0.5s; transition: width 0.5s;
+    }
+    .soc-bar-fill.high   { background: #30d158; }
+    .soc-bar-fill.mid    { background: #ffd60a; }
+    .soc-bar-fill.low    { background: #ff453a; }
+
+    /* Energy stats row */
+    .energy-stats {
+      display: -webkit-flex; display: flex;
+      -webkit-flex-wrap: wrap; flex-wrap: wrap;
+      gap: 6px; margin-bottom: 12px;
+    }
+    .energy-stat {
+      background: #2c2c2e; border-radius: 8px; padding: 6px 10px;
+      font-size: 12px; color: #ebebf5;
+      display: -webkit-flex; display: flex;
+      -webkit-align-items: center; align-items: center; gap: 4px;
+    }
+    .energy-stat-val { font-weight: 600; }
+
+    /* Pack bars */
+    .pack-grid {
+      display: -webkit-flex; display: flex;
+      -webkit-flex-wrap: wrap; flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pack-item {
+      -webkit-flex: 1 1 calc(33% - 6px); flex: 1 1 calc(33% - 6px);
+      background: #2c2c2e; border-radius: 8px; padding: 8px;
+      min-width: 80px;
+    }
+    .pack-label { font-size: 10px; color: #8e8e93; margin-bottom: 4px; }
+    .pack-soc-val { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .pack-bar-track {
+      height: 4px; background: #48484a; border-radius: 2px; overflow: hidden;
+    }
+    .pack-bar-fill {
+      height: 100%; border-radius: 2px;
+    }
+    .pack-bar-fill.high   { background: #30d158; }
+    .pack-bar-fill.mid    { background: #ffd60a; }
+    .pack-bar-fill.low    { background: #ff453a; }
+    .pack-temp { font-size: 10px; color: #8e8e93; margin-top: 3px; }
+
+    /* General cards */
+    .cards {
+      display: -webkit-flex; display: flex;
+      -webkit-flex-wrap: wrap; flex-wrap: wrap;
+      gap: 8px;
+    }
+    .card {
+      -webkit-flex: 1 1 130px; flex: 1 1 130px;
+      max-width: 180px; min-width: 110px;
+      background: #1c1c1e; border-radius: 12px; padding: 12px;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      border: 1px solid transparent;
+    }
+    .card.on { background: #1a3055; border-color: #0a84ff44; }
+    .card.dim { opacity: 0.4; }
+    .card-icon  { font-size: 20px; margin-bottom: 6px; }
+    .card-name  { font-size: 11px; color: #8e8e93; word-break: break-word; }
+    .card-state { font-size: 15px; font-weight: 600; margin-top: 4px; }
+    .card-detail { font-size: 11px; color: #8e8e93; margin-top: 2px; }
+
+    /* Sensor rows */
+    .sensor-row {
+      display: -webkit-flex; display: flex;
+      -webkit-align-items: center; align-items: center;
+      -webkit-justify-content: space-between; justify-content: space-between;
+      padding: 9px 12px; background: #1c1c1e; border-radius: 10px;
+      margin-bottom: 6px;
+    }
+    .sensor-left { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; gap: 8px; }
+    .sensor-icon { font-size: 15px; width: 22px; text-align: center; }
+    .sensor-name { font-size: 13px; }
+    .sensor-val  { font-size: 13px; font-weight: 600; }
+
+    /* Forecast strip */
+    .forecast-strip {
+      display: -webkit-flex; display: flex;
+      gap: 5px; margin-top: 12px;
+    }
+    .forecast-day {
+      -webkit-flex: 1 1 0; flex: 1 1 0;
+      background: #2c2c2e; border-radius: 10px;
+      padding: 8px 4px; text-align: center;
+      min-width: 0;
+    }
+    .forecast-dow   { font-size: 10px; color: #8e8e93; margin-bottom: 3px; white-space: nowrap; overflow: hidden; }
+    .forecast-icon  { font-size: 18px; margin-bottom: 3px; }
+    .forecast-hi    { font-size: 12px; font-weight: 700; }
+    .forecast-lo    { font-size: 11px; color: #8e8e93; }
+    .forecast-sun   { font-size: 10px; color: #ffd60a; margin-top: 2px; }
+    .forecast-rain  { font-size: 10px; color: #64d2ff; margin-top: 1px; }
+
+    /* Weather current row */
+    .weather-main {
+      display: -webkit-flex; display: flex;
+      -webkit-align-items: center; align-items: center;
+      -webkit-justify-content: space-between; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .weather-left { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; gap: 10px; }
+    .weather-cond-icon { font-size: 42px; line-height: 1; }
+    .weather-cond-name { font-size: 13px; color: #ebebf5; text-transform: capitalize; margin-top: 3px; }
+    .weather-temp-big  { font-size: 42px; font-weight: 700; line-height: 1; text-align: right; }
+    .weather-location  { font-size: 11px; color: #8e8e93; margin-bottom: 8px; }
+
+    #sensors-toggle {
+      width: 100%; padding: 9px 12px; background: #1c1c1e;
+      color: #8e8e93; border: none; border-radius: 10px;
+      font-size: 13px; cursor: pointer; text-align: left; margin-bottom: 6px;
+    }
+    #sensors-section { display: none; }
+
+    .person-chip {
+      display: -webkit-inline-flex; display: inline-flex;
+      -webkit-align-items: center; align-items: center;
+      gap: 6px; padding: 7px 12px;
+      background: #1c1c1e; border-radius: 20px;
+      font-size: 13px; margin: 0 6px 6px 0;
+    }
+    .person-chip.home { background: #1a3055; }
+
+    #status { position: fixed; bottom: 8px; right: 10px; font-size: 11px; color: #48484a; }
+  </style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>Home Assistant</h2>
+  <p>Sign in with your HA username and password.</p>
+  <input id="ha-user" type="text" placeholder="Username" autocomplete="username" autocorrect="off" autocapitalize="none">
+  <input id="ha-pass" type="password" placeholder="Password" autocomplete="current-password">
+  <button onclick="doLogin()">Sign In</button>
+  <div id="login-error">Incorrect username or password.</div>
+</div>
+
+<div id="dashboard">
+  <div id="topbar">
+    <h1>&#127968; Home Assistant</h1>
+    <span id="conn-badge" class="ok">&#9679; Connected</span>
+  </div>
+  <div id="content"></div>
+</div>
+
+<div id="status"></div>
+
+<script>
+var CLIENT_ID = location.protocol + '//' + location.host + '/';
+var accessToken = localStorage.getItem('ha_access_token');
+var refreshToken = localStorage.getItem('ha_refresh_token');
+var ws = null;
+var msgId = 1;
+var states = {};
+var forecast = [];
+var forecastMsgId = -1;
+var refreshTimer = null;
+
+// BMS / energy entity IDs
+var BMS_PACK_COUNT = 6;
+var BMS = {
+  soc:        'sensor.bms_bank_soc',
+  power:      'sensor.bms_bank_power',
+  voltage:    'sensor.bms_bank_voltage',
+  current:    'sensor.bms_bank_current',
+  temp:       'sensor.bms_bank_temperature',
+  state:      'sensor.bms_bank_state',
+  chargeP:    'sensor.bms_charge_power',
+  dischargeP: 'sensor.bms_discharge_power',
+  remainAh:   'sensor.bms_bank_remaining_ah',
+  capacityKwh:'sensor.bms_bank_capacity_kwh',
+  packs:      'sensor.bms_packs_connected'
+};
+
+var CARD_DOMAINS   = { light:1, switch:1, climate:1, media_player:1, cover:1, fan:1, lock:1, input_boolean:1, alarm_control_panel:1, vacuum:1, scene:1 };
+var SENSOR_DOMAINS = { sensor:1, binary_sensor:1 };
+var PERSON_DOMAINS = { person:1, device_tracker:1 };
+var SKIP = { zone:1, persistent_notification:1, update:1, automation:1, script:1,
+             input_select:1, input_number:1, input_text:1, input_datetime:1,
+             timer:1, counter:1, group:1, sun:1, number:1, select:1, button:1,
+             event:1, conversation:1, stt:1, tts:1, wake_word:1 };
+
+// Weather + waste + grid entities — shown in dedicated sections, excluded from generic lists
+var WEATHER_EID = 'weather.forecast_home';
+var WASTE_EIDS  = ['sensor.next_collection','sensor.general_waste','sensor.recycling','sensor.garden_waste'];
+var GRID_EIDS   = {
+  today:     'sensor.eon_next_meter_22j0530076_eon_next_electricity_today_22j0530076',
+  yesterday: 'sensor.eon_next_meter_22j0530076_eon_next_electricity_yesterday_22j0530076',
+  total:     'sensor.eon_next_meter_22j0530076_eon_next_electricity_meter_22j0530076',
+  period:    'sensor.eon_next_meter_22j0530076_eon_next_electricity_period_22j0530076'
+};
+var WEATHER_ICONS = {
+  'sunny':'☀️','clear-night':'🌙','partlycloudy':'⛅','cloudy':'☁️',
+  'rainy':'🌧️','pouring':'🌧️','snowy':'❄️','snowy-rainy':'🌨️',
+  'lightning':'⛈️','lightning-rainy':'⛈️','windy':'🌬️',
+  'windy-variant':'🌬️','fog':'🌫️','hail':'🌨️','exceptional':'🌡️'
+};
+var BIN_ICONS = {
+  'general':'🗑️','general waste':'🗑️','non-recyclable':'🗑️',
+  'recycling':'♻️','recycl':'♻️',
+  'garden':'🌿','garden waste':'🌿',
+  'food':'🍃'
+};
+var DEDICATED_SKIP = {};
+(function() {
+  // BMS / energy
+  DEDICATED_SKIP[BMS.soc] = 1; DEDICATED_SKIP[BMS.power] = 1; DEDICATED_SKIP[BMS.voltage] = 1;
+  DEDICATED_SKIP[BMS.current] = 1; DEDICATED_SKIP[BMS.temp] = 1; DEDICATED_SKIP[BMS.state] = 1;
+  DEDICATED_SKIP[BMS.chargeP] = 1; DEDICATED_SKIP[BMS.dischargeP] = 1;
+  DEDICATED_SKIP[BMS.remainAh] = 1; DEDICATED_SKIP[BMS.capacityKwh] = 1; DEDICATED_SKIP[BMS.packs] = 1;
+  for (var i = 1; i <= BMS_PACK_COUNT; i++) {
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_soc'] = 1;
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_temperature'] = 1;
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_voltage'] = 1;
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_current'] = 1;
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_remaining_ah'] = 1;
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_cell_max'] = 1;
+    DEDICATED_SKIP['sensor.solar_pack_' + i + '_cell_min'] = 1;
+  }
+  // Weather, waste, grid
+  DEDICATED_SKIP[WEATHER_EID] = 1;
+  DEDICATED_SKIP['sun.sun'] = 1;
+  DEDICATED_SKIP['zone.home'] = 1;
+  for (var w = 0; w < WASTE_EIDS.length; w++) DEDICATED_SKIP[WASTE_EIDS[w]] = 1;
+  var gkeys = Object.keys(GRID_EIDS);
+  for (var g = 0; g < gkeys.length; g++) DEDICATED_SKIP[GRID_EIDS[gkeys[g]]] = 1;
+}());
+
+var ICONS = {
+  light:'💡', switch:'🔌', climate:'🌡', media_player:'📺', cover:'🪟',
+  fan:'💨', lock:'🔒', input_boolean:'🔘', alarm_control_panel:'🚨',
+  vacuum:'🤖', scene:'🎨', sensor:'📡', binary_sensor:'🔔',
+  person:'👤', device_tracker:'📍'
+};
+var DOMAIN_LABELS = {
+  light:'Lights', switch:'Switches', climate:'Climate', media_player:'Media',
+  cover:'Covers & Blinds', fan:'Fans', lock:'Locks', input_boolean:'Toggles',
+  alarm_control_panel:'Alarm', vacuum:'Vacuums', scene:'Scenes'
+};
+var TOGGLEABLE = { light:1, switch:1, input_boolean:1, fan:1, cover:1, lock:1 };
+
+/* ── Auth ──────────────────────────────── */
+function init() {
+  if (refreshToken) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    refreshAccessToken(connect);
+  }
+}
+function doLogin() {
+  var user = document.getElementById('ha-user').value.trim();
+  var pass = document.getElementById('ha-pass').value;
+  if (!user || !pass) return;
+  document.querySelector('#login-screen button').disabled = true;
+  setStatus('Signing in…');
+  xhr('POST', '/auth/login_flow',
+    JSON.stringify({ handler: ['homeassistant', null], client_id: CLIENT_ID, redirect_uri: CLIENT_ID }),
+    'application/json', function(r1) {
+      if (!r1.flow_id) { loginError(); return; }
+      xhr('POST', '/auth/login_flow/' + r1.flow_id,
+        JSON.stringify({ username: user, password: pass, client_id: CLIENT_ID }),
+        'application/json', function(r2) {
+          if (!r2.result) { loginError(); return; }
+          xhr('POST', '/auth/token',
+            'grant_type=authorization_code&code=' + encodeURIComponent(r2.result) + '&client_id=' + encodeURIComponent(CLIENT_ID),
+            'application/x-www-form-urlencoded', function(r3) {
+              if (!r3.access_token) { loginError(); return; }
+              storeTokens(r3);
+              document.getElementById('login-screen').style.display = 'none';
+              document.getElementById('dashboard').style.display = 'block';
+              setStatus(''); connect();
+            });
+        });
+    });
+}
+function loginError() {
+  document.getElementById('login-error').style.display = 'block';
+  document.querySelector('#login-screen button').disabled = false;
+  setStatus('');
+}
+function storeTokens(r) {
+  accessToken = r.access_token; refreshToken = r.refresh_token;
+  localStorage.setItem('ha_access_token', accessToken);
+  localStorage.setItem('ha_refresh_token', refreshToken);
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(function() { refreshAccessToken(function(){}); }, 25 * 60 * 1000);
+}
+function refreshAccessToken(cb) {
+  xhr('POST', '/auth/token',
+    'grant_type=refresh_token&refresh_token=' + encodeURIComponent(refreshToken) + '&client_id=' + encodeURIComponent(CLIENT_ID),
+    'application/x-www-form-urlencoded', function(r) {
+      if (r.access_token) { storeTokens(r); cb(); }
+      else { localStorage.removeItem('ha_access_token'); localStorage.removeItem('ha_refresh_token'); location.reload(); }
+    });
+}
+
+/* ── WebSocket ─────────────────────────── */
+function connect() {
+  setStatus('Connecting…');
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/api/websocket');
+  ws.onopen = function() { setStatus('Authenticating…'); };
+  ws.onmessage = function(evt) {
+    var msg = JSON.parse(evt.data);
+    if (msg.type === 'auth_required') {
+      ws.send(JSON.stringify({ type: 'auth', access_token: accessToken }));
+    } else if (msg.type === 'auth_ok') {
+      setStatus(''); setBadge(true);
+      ws.send(JSON.stringify({ id: 1, type: 'get_states' }));
+      ws.send(JSON.stringify({ id: 2, type: 'subscribe_events', event_type: 'state_changed' }));
+      forecastMsgId = 3; msgId = 4;
+      ws.send(JSON.stringify({ id: forecastMsgId, type: 'call_service', domain: 'weather',
+        service: 'get_forecasts', service_data: { type: 'daily', entity_id: WEATHER_EID },
+        return_response: true }));
+    } else if (msg.type === 'auth_invalid') {
+      ws.close(); refreshAccessToken(connect);
+    } else if (msg.type === 'result' && msg.id === forecastMsgId) {
+      try {
+        forecast = msg.result.response[WEATHER_EID].forecast || [];
+        render();
+      } catch(e) {}
+    } else if (msg.type === 'result' && msg.id === 1 && msg.result) {
+      var list = msg.result;
+      for (var i = 0; i < list.length; i++) states[list[i].entity_id] = list[i];
+      render();
+    } else if (msg.type === 'event' && msg.event && msg.event.event_type === 'state_changed') {
+      var d = msg.event.data;
+      if (d.new_state) states[d.entity_id] = d.new_state;
+      else delete states[d.entity_id];
+      // Re-fetch forecast when weather entity updates
+      if (d.entity_id === WEATHER_EID) {
+        forecastMsgId = msgId++;
+        ws.send(JSON.stringify({ id: forecastMsgId, type: 'call_service', domain: 'weather',
+          service: 'get_forecasts', service_data: { type: 'daily', entity_id: WEATHER_EID },
+          return_response: true }));
+      }
+      render();
+    }
+  };
+  ws.onclose = function() { setBadge(false); setStatus('Reconnecting in 5s…'); setTimeout(connect, 5000); };
+  ws.onerror = function() { ws.close(); };
+}
+
+/* ── Render ────────────────────────────── */
+function render() {
+  var html = '';
+
+  // ── Energy section ──────────────────────
+  html += '<div class="section">';
+  html += '<div class="section-title">⚡ Battery Bank</div>';
+  html += renderEnergy();
+  html += '</div>';
+
+  // ── Weather ─────────────────────────────
+  html += renderWeather();
+
+  // ── Bin collections ─────────────────────
+  html += renderWaste();
+
+  // ── Grid usage ──────────────────────────
+  html += renderGrid();
+
+  // ── Bucket remaining entities ───────────
+  var byDomain = {}, sensors = [], persons = [];
+  var ids = Object.keys(states).sort();
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i];
+    if (DEDICATED_SKIP[id]) continue;
+    var entity = states[id];
+    var domain = id.split('.')[0];
+    if (SKIP[domain]) continue;
+    if (entity.state === 'unavailable') continue;
+    if (CARD_DOMAINS[domain]) {
+      if (!byDomain[domain]) byDomain[domain] = [];
+      byDomain[domain].push(entity);
+    } else if (SENSOR_DOMAINS[domain]) {
+      sensors.push(entity);
+    } else if (PERSON_DOMAINS[domain]) {
+      persons.push(entity);
+    }
+  }
+
+  if (persons.length) {
+    html += '<div class="section"><div class="section-title">People</div>';
+    for (var pi = 0; pi < persons.length; pi++) {
+      var pe = persons[pi];
+      var pname = (pe.attributes && pe.attributes.friendly_name) || pe.entity_id;
+      html += '<span class="person-chip' + (pe.state === 'home' ? ' home' : '') + '">👤 ' + escHtml(pname) + ' · ' + escHtml(pe.state) + '</span>';
+    }
+    html += '</div>';
+  }
+
+  var domainOrder = ['light','switch','climate','media_player','cover','fan','lock','alarm_control_panel','vacuum','input_boolean','scene'];
+  for (var di = 0; di < domainOrder.length; di++) {
+    var dom = domainOrder[di];
+    if (!byDomain[dom] || !byDomain[dom].length) continue;
+    html += '<div class="section"><div class="section-title">' + (DOMAIN_LABELS[dom] || dom) + '</div><div class="cards">';
+    var ents = byDomain[dom];
+    for (var ei = 0; ei < ents.length; ei++) {
+      var e = ents[ei];
+      var eid = e.entity_id;
+      var name = (e.attributes && e.attributes.friendly_name) || eid;
+      var st = e.state;
+      var icon = ICONS[dom] || '🔷';
+      var isOn = (st==='on'||st==='playing'||st==='open'||st==='unlocked'||st==='cooling'||st==='heating');
+      var detail = '';
+      if (dom === 'climate' && e.attributes) {
+        var cur = e.attributes.current_temperature, tgt = e.attributes.temperature;
+        if (cur !== undefined) detail = cur + '°';
+        if (tgt !== undefined) detail += (detail ? ' → ' : '') + tgt + '°';
+      } else if (dom === 'media_player' && e.attributes && e.attributes.media_title) {
+        detail = String(e.attributes.media_title).substring(0, 28);
+      } else if (dom === 'lock') {
+        icon = st === 'locked' ? '🔒' : '🔓';
+      }
+      html += '<div class="card' + (isOn ? ' on' : '') + '" data-eid="' + escAttr(eid) + '" data-dom="' + escAttr(dom) + '" onclick="tap(this)">';
+      html += '<div class="card-icon">' + icon + '</div>';
+      html += '<div class="card-name">' + escHtml(name) + '</div>';
+      html += '<div class="card-state">' + escHtml(st) + '</div>';
+      if (detail) html += '<div class="card-detail">' + escHtml(detail) + '</div>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  if (sensors.length) {
+    html += '<div class="section">';
+    html += '<button id="sensors-toggle" onclick="toggleSensors()">📊 Sensors (' + sensors.length + ') ▼</button>';
+    html += '<div id="sensors-section">';
+    for (var si = 0; si < sensors.length; si++) {
+      var se = sensors[si];
+      var sdom = se.entity_id.split('.')[0];
+      var sname = (se.attributes && se.attributes.friendly_name) || se.entity_id;
+      var sval = se.state;
+      var unit = (se.attributes && se.attributes.unit_of_measurement) || '';
+      html += '<div class="sensor-row">';
+      html += '<div class="sensor-left"><span class="sensor-icon">' + (ICONS[sdom]||'📡') + '</span>';
+      html += '<span class="sensor-name">' + escHtml(sname) + '</span></div>';
+      html += '<span class="sensor-val">' + escHtml(sval) + (unit ? ' ' + escHtml(unit) : '') + '</span>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function renderEnergy() {
+  var soc      = parseFloat(val(BMS.soc)) || 0;
+  var power    = parseFloat(val(BMS.power)) || 0;
+  var chargeP  = parseFloat(val(BMS.chargeP)) || 0;
+  var dischargeP = Math.abs(parseFloat(val(BMS.dischargeP)) || 0);
+  var voltage  = val(BMS.voltage);
+  var current  = val(BMS.current);
+  var temp     = val(BMS.temp);
+  var remainAh = val(BMS.remainAh);
+  var capKwh   = val(BMS.capacityKwh);
+  var packsConn = val(BMS.packs);
+
+  var socClass = soc >= 60 ? 'high' : soc >= 25 ? 'mid' : 'low';
+
+  // Determine flow
+  var flowVal, flowClass, flowLabel;
+  if (chargeP > 5) {
+    flowVal = chargeP + ' W';
+    flowClass = 'charging';
+    flowLabel = '↑ Charging';
+  } else if (dischargeP > 5) {
+    flowVal = dischargeP + ' W';
+    flowClass = 'discharging';
+    flowLabel = '↓ Discharging';
+  } else {
+    flowVal = '— W';
+    flowClass = 'idle';
+    flowLabel = 'Idle';
+  }
+
+  var h = '<div class="energy-card">';
+
+  // Header row: SOC big + flow
+  h += '<div class="energy-header">';
+  h += '<div><div class="energy-soc ' + socClass + '">' + soc + '<span style="font-size:20px">%</span></div>';
+  h += '<div style="font-size:11px;color:#8e8e93;margin-top:2px">State of Charge</div></div>';
+  h += '<div class="energy-flow"><div class="energy-flow-val ' + flowClass + '">' + flowVal + '</div>';
+  h += '<div class="energy-flow-label">' + flowLabel + '</div></div>';
+  h += '</div>';
+
+  // SOC bar
+  h += '<div class="soc-bar-track"><div class="soc-bar-fill ' + socClass + '" style="width:' + Math.min(100, soc) + '%"></div></div>';
+
+  // Stats chips
+  h += '<div class="energy-stats">';
+  if (voltage !== '—') h += stat('⚡', voltage + ' V');
+  if (current !== '—') h += stat('〰', current + ' A');
+  if (temp !== '—') h += stat('🌡', temp + ' °C');
+  if (remainAh !== '—') h += stat('🔋', remainAh + ' Ah');
+  if (packsConn !== '—') h += stat('📦', packsConn);
+  h += '</div>';
+
+  // Individual pack bars
+  h += '<div style="font-size:10px;color:#8e8e93;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Packs</div>';
+  h += '<div class="pack-grid">';
+  for (var p = 1; p <= BMS_PACK_COUNT; p++) {
+    var psoc  = parseFloat(val('sensor.solar_pack_' + p + '_soc')) || 0;
+    var ptemp = val('sensor.solar_pack_' + p + '_temperature');
+    var pcls  = psoc >= 60 ? 'high' : psoc >= 25 ? 'mid' : 'low';
+    h += '<div class="pack-item">';
+    h += '<div class="pack-label">Pack ' + p + '</div>';
+    h += '<div class="pack-soc-val ' + pcls + '">' + psoc + '%</div>';
+    h += '<div class="pack-bar-track"><div class="pack-bar-fill ' + pcls + '" style="width:' + Math.min(100, psoc) + '%"></div></div>';
+    if (ptemp !== '—') h += '<div class="pack-temp">' + ptemp + ' °C</div>';
+    h += '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+// Fraction of daylight that is sunny for each weather condition
+var CONDITION_SUN = {
+  'sunny': 0.95, 'clear-night': 0, 'partlycloudy': 0.55,
+  'cloudy': 0.22, 'rainy': 0.15, 'pouring': 0.05,
+  'snowy': 0.20, 'snowy-rainy': 0.10,
+  'lightning': 0.05, 'lightning-rainy': 0.05,
+  'windy': 0.75, 'windy-variant': 0.50,
+  'fog': 0.12, 'hail': 0.10, 'exceptional': 0.30
+};
+
+function daylightHours() {
+  var sun = states['sun.sun'];
+  if (!sun || !sun.attributes) return 16;
+  try {
+    var setting = new Date(sun.attributes.next_setting);
+    var rising  = new Date(sun.attributes.next_rising);
+    var todayRising = new Date(rising.getTime() - 86400000);
+    var hours = (setting - todayRising) / 3600000;
+    return (hours > 0 && hours < 24) ? hours : 16;
+  } catch(e) { return 16; }
+}
+
+// sunHours from cloud coverage % (today's current conditions)
+function sunHoursFromCloud(cloudPct) {
+  if (cloudPct === undefined || cloudPct === null) return null;
+  var h = daylightHours() * (1 - cloudPct / 100);
+  return Math.max(0, Math.round(h * 10) / 10);
+}
+
+// sunHours from forecast condition string
+function sunHoursFromCondition(condition) {
+  if (!condition) return null;
+  var frac = CONDITION_SUN[condition];
+  if (frac === undefined) return null;
+  if (frac === 0) return 0;
+  return Math.max(0, Math.round(daylightHours() * frac * 10) / 10);
+}
+
+function renderWeather() {
+  var e = states[WEATHER_EID];
+  if (!e) return '';
+
+  var locationName = (states['zone.home'] && states['zone.home'].attributes && states['zone.home'].attributes.friendly_name) || 'Home';
+
+  var h = '<div class="section"><div class="section-title">🌤 Weather</div>';
+  h += '<div class="energy-card">';
+
+  var condition = e.state;
+  if (condition === 'unavailable' || condition === 'unknown') {
+    h += '<div style="color:#8e8e93;font-size:13px;padding:4px 0">Weather service unavailable — will update automatically</div>';
+    h += '</div></div>';
+    return h;
+  }
+
+  var icon = WEATHER_ICONS[condition] || '🌡️';
+  var attr = e.attributes || {};
+  var tempVal  = attr.temperature !== undefined ? Math.round(attr.temperature) : null;
+  var tempUnit = attr.temperature_unit || '°C';
+  var humidity = attr.humidity !== undefined ? attr.humidity + '%' : null;
+  var wind     = attr.wind_speed !== undefined ? Math.round(attr.wind_speed) + ' ' + (attr.wind_speed_unit || 'km/h') : null;
+  var uv       = attr.uv_index !== undefined ? 'UV ' + attr.uv_index : null;
+  var pressure = attr.pressure !== undefined ? Math.round(attr.pressure) + ' ' + (attr.pressure_unit || 'hPa') : null;
+  var todaySun = attr.cloud_coverage !== undefined
+    ? sunHoursFromCloud(attr.cloud_coverage)
+    : sunHoursFromCondition(condition);
+
+  // Location
+  h += '<div class="weather-location">📍 ' + escHtml(locationName) + '</div>';
+
+  // Main row: icon + condition name | temperature
+  h += '<div class="weather-main">';
+  h += '<div class="weather-left">';
+  h += '<div class="weather-cond-icon">' + icon + '</div>';
+  h += '<div><div class="weather-cond-name">' + escHtml(condition.replace(/-/g, ' ')) + '</div>';
+  if (todaySun !== null) h += '<div style="font-size:12px;color:#ffd60a;margin-top:3px">☀ ~' + todaySun + 'h sun</div>';
+  h += '</div></div>';
+  h += '<div class="weather-temp-big">' + (tempVal !== null ? tempVal + tempUnit : '—') + '</div>';
+  h += '</div>';
+
+  // Stats row — stretched across full width
+  h += '<div class="energy-stats" style="-webkit-justify-content:space-between;justify-content:space-between">';
+  if (humidity) h += stat('💧', humidity);
+  if (wind)     h += stat('🌬', wind);
+  if (uv)       h += stat('🔆', uv);
+  if (pressure) h += stat('⏱', pressure);
+  h += '</div>';
+
+  // Forecast strip — full width, equal columns
+  if (forecast && forecast.length) {
+    var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    h += '<div class="forecast-strip">';
+    var shown = Math.min(forecast.length, 7);
+    for (var fi = 0; fi < shown; fi++) {
+      var fc = forecast[fi];
+      var dt = new Date(fc.datetime);
+      var dow = fi === 0 ? 'Today' : DAYS[dt.getDay()];
+      var fcIcon = WEATHER_ICONS[fc.condition] || '🌡️';
+      var hi   = fc.temperature !== undefined ? Math.round(fc.temperature) + '°' : '—';
+      var lo   = fc.templow !== undefined ? Math.round(fc.templow) + '°' : null;
+      var rain = (fc.precipitation && fc.precipitation > 0) ? fc.precipitation + 'mm' : null;
+      var fcSun = fc.cloud_coverage !== undefined
+        ? sunHoursFromCloud(fc.cloud_coverage)
+        : sunHoursFromCondition(fc.condition);
+
+      h += '<div class="forecast-day">';
+      h += '<div class="forecast-dow">' + dow + '</div>';
+      h += '<div class="forecast-icon">' + fcIcon + '</div>';
+      h += '<div class="forecast-hi">' + hi + '</div>';
+      if (lo)    h += '<div class="forecast-lo">' + lo + '</div>';
+      if (fcSun !== null) h += '<div class="forecast-sun">☀' + fcSun + 'h</div>';
+      if (rain)  h += '<div class="forecast-rain">💧' + rain + '</div>';
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+
+  h += '</div></div>';
+  return h;
+}
+
+function renderGrid() {
+  var todayE     = states[GRID_EIDS.today];
+  var yesterdayE = states[GRID_EIDS.yesterday];
+  var totalE     = states[GRID_EIDS.total];
+  var periodE    = states[GRID_EIDS.period];
+  if (!totalE) return '';
+
+  var h = '<div class="section"><div class="section-title">🔌 Grid Usage (EON Next)</div>';
+  h += '<div class="energy-card"><div class="energy-stats" style="gap:8px">';
+
+  function gridStat(label, eid, icon) {
+    if (!states[eid]) return '';
+    var v = states[eid].state;
+    var good = v !== 'unavailable' && v !== 'unknown';
+    var unit = (states[eid].attributes && states[eid].attributes.unit_of_measurement) || 'kWh';
+    return '<div class="energy-stat" style="-webkit-flex:1 1 calc(50% - 8px);flex:1 1 calc(50% - 8px);-webkit-flex-direction:column;flex-direction:column;align-items:flex-start;padding:10px 12px">' +
+      '<div style="font-size:11px;color:#8e8e93;margin-bottom:4px">' + icon + ' ' + label + '</div>' +
+      '<div class="energy-stat-val" style="font-size:18px">' + (good ? escHtml(v) + ' <span style=\"font-size:11px;font-weight:400\">' + unit + '</span>' : '<span style=\"color:#48484a\">—</span>') + '</div>' +
+      '</div>';
+  }
+
+  h += gridStat('Today',     GRID_EIDS.today,     '📅');
+  h += gridStat('Yesterday', GRID_EIDS.yesterday, '📆');
+  h += gridStat('This period', GRID_EIDS.period,  '🗓');
+  h += gridStat('Total meter', GRID_EIDS.total,   '🔢');
+
+  h += '</div>';
+  h += '<div style="font-size:11px;color:#48484a;margin-top:8px">Smart meter · updates daily</div>';
+  h += '</div></div>';
+  return h;
+}
+
+function renderWaste() {
+  var hasAny = false;
+  for (var w = 0; w < WASTE_EIDS.length; w++) {
+    if (states[WASTE_EIDS[w]]) { hasAny = true; break; }
+  }
+  if (!hasAny) return '';
+
+  var h = '<div class="section"><div class="section-title">🗑 Bin Collections</div>';
+
+  for (var wi = 0; wi < WASTE_EIDS.length; wi++) {
+    var e = states[WASTE_EIDS[wi]];
+    if (!e) continue;
+    var name  = (e.attributes && e.attributes.friendly_name) || e.entity_id;
+    var st    = e.state;
+    if (st === 'unknown' || st === 'unavailable') continue;
+
+    // Pick icon from name or state
+    var icon = '🗑️';
+    var search = (name + ' ' + st).toLowerCase();
+    var bkeys = Object.keys(BIN_ICONS);
+    for (var b = 0; b < bkeys.length; b++) {
+      if (search.indexOf(bkeys[b]) !== -1) { icon = BIN_ICONS[bkeys[b]]; break; }
+    }
+
+    // Highlight if collection is today or tomorrow
+    var days = e.attributes && e.attributes.daysTo !== undefined ? parseInt(e.attributes.daysTo) : null;
+    var urgent = days !== null && days <= 1;
+
+    h += '<div class="sensor-row" style="' + (urgent ? 'border:1px solid #ffd60a;' : '') + '">';
+    h += '<div class="sensor-left"><span class="sensor-icon">' + icon + '</span>';
+    h += '<span class="sensor-name">' + escHtml(name) + '</span></div>';
+    h += '<span class="sensor-val" style="' + (urgent ? 'color:#ffd60a' : '') + '">' + escHtml(st) + '</span>';
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function stat(icon, text) {
+  return '<div class="energy-stat">' + icon + ' <span class="energy-stat-val">' + escHtml(text) + '</span></div>';
+}
+
+function val(eid) {
+  var e = states[eid];
+  if (!e) return '—';
+  var v = e.state;
+  return (v === 'unavailable' || v === 'unknown') ? '—' : v;
+}
+
+function tap(card) {
+  var eid = card.getAttribute('data-eid');
+  var dom = card.getAttribute('data-dom');
+  if (!TOGGLEABLE[dom] && dom !== 'scene') return;
+  var id2 = msgId++;
+  ws.send(JSON.stringify({ id: id2, type: 'call_service', domain: dom,
+    service: dom === 'scene' ? 'turn_on' : 'toggle', service_data: { entity_id: eid } }));
+}
+
+function toggleSensors() {
+  var sec = document.getElementById('sensors-section');
+  var btn = document.getElementById('sensors-toggle');
+  if (!sec) return;
+  var show = sec.style.display !== 'block';
+  sec.style.display = show ? 'block' : 'none';
+  btn.innerHTML = btn.innerHTML.replace(show ? '▼' : '▲', show ? '▲' : '▼');
+}
+
+function xhr(method, url, body, ct, cb) {
+  var x = new XMLHttpRequest();
+  x.open(method, url, true);
+  x.setRequestHeader('Content-Type', ct);
+  x.onload = function() { try { cb(JSON.parse(x.responseText)); } catch(e) { cb({}); } };
+  x.onerror = function() { cb({}); };
+  x.send(body);
+}
+function setBadge(ok) {
+  var b = document.getElementById('conn-badge');
+  b.className = ok ? 'ok' : 'err';
+  b.textContent = ok ? '● Connected' : '● Disconnected';
+}
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) { return escHtml(s); }
+
+init();
+</script>
+</body>
+</html>
